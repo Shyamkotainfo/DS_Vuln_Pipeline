@@ -62,7 +62,7 @@ GOLD_TABLES = {
 SOURCES = {
     "nvd": {
         "url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
-        "api_key": dbutils.secrets.get(scope="vuln-pipeline", key="nvd-api-key") if "dbutils" in dir() else None,
+        "api_key": None,  # Set below after try/except
         "rate_limit_delay": 0.6,   # seconds between calls with API key
         "rate_limit_delay_no_key": 6.0,
         "batch_size": 2000,
@@ -81,6 +81,14 @@ SOURCES = {
         "url": "https://raw.githubusercontent.com/rapid7/metasploit-framework/master/db/modules_metadata_base.json",
     },
 }
+
+# Try to load NVD API key from Databricks secrets (optional)
+try:
+    SOURCES["nvd"]["api_key"] = dbutils.secrets.get(scope="vuln-pipeline", key="nvd-api-key")
+    print("✅ NVD API key loaded from secrets")
+except Exception:
+    SOURCES["nvd"]["api_key"] = None
+    print("ℹ️ NVD API key not configured — using public rate limit (6s delay)")
 
 # COMMAND ----------
 
