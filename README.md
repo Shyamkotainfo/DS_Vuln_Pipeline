@@ -1,6 +1,6 @@
 # Vulnerability Intelligence — Medallion Pipeline
 
-End-to-end Medallion Architecture pipeline for Databricks on GCP Cloud Storage.
+End-to-end Medallion Architecture pipeline for Databricks using **Unity Catalog managed tables**.
 
 ## Architecture
 
@@ -22,15 +22,15 @@ Raw APIs/Feeds → Bronze (Delta) → Silver (Delta) → Gold (Delta) → KPIs &
 
 ```
 pipeline/
-├── config.py                           # GCS paths, schemas, API config
+├── config.py                           # Unity Catalog setup, API config
 ├── utils/
-│   └── synthetic_generator.py          # 1GB/day synthetic data with CVE integrity
+│   └── synthetic_generator.py          # Synthetic data generator for large volumes
 ├── bronze/
-│   ├── bronze_nvd.py                   # NVD API → Delta
-│   ├── bronze_cisa.py                  # CISA JSON → Delta
-│   ├── bronze_epss.py                  # EPSS CSV.GZ → Delta
-│   ├── bronze_exploitdb.py             # ExploitDB CSV → Delta
-│   └── bronze_metasploit.py            # Metasploit JSON → Delta
+│   ├── bronze_nvd.py                   # NVD API → Unity Catalog Delta
+│   ├── bronze_cisa.py                  # CISA JSON → Unity Catalog Delta
+│   ├── bronze_epss.py                  # EPSS CSV.GZ → Unity Catalog Delta
+│   ├── bronze_exploitdb.py             # ExploitDB CSV → Unity Catalog Delta
+│   └── bronze_metasploit.py            # Metasploit JSON → Unity Catalog Delta
 ├── silver/
 │   ├── silver_nvd.py                   # Flatten JSON, extract CVSS, dedup
 │   ├── silver_cisa.py                  # Parse dates, boolean conversion
@@ -49,10 +49,10 @@ pipeline/
 
 ## Quick Start
 
-1. **Configure**: Update `GCS_BUCKET` in `pipeline/config.py`
-2. **Import**: Upload `pipeline/` folder to Databricks workspace
-3. **Run**: Execute `pipeline/orchestrator.py` on a cluster with Delta Lake
-4. **Schedule**: Create a daily Databricks Workflow job pointing to `orchestrator.py`
+1. **Configure Unity Catalog**: Define your desired `CATALOG` and `SCHEMA` in `pipeline/config.py`. By default, it will automatically create and use `vulnerability_intelligence.pipeline`.
+2. **Import Repo**: Add this Git repository to your Databricks Workspace (under Repo/Workspace).
+3. **Run**: Execute `pipeline/orchestrator.py` on a cluster. Unity Catalog tables will automatically be provisioned, and data will be ingested.
+4. **Schedule**: Create a daily Databricks Workflow job executing `orchestrator.py` to keep the warehouse up to date.
 
 ## Gold Layer Tables
 
@@ -66,6 +66,7 @@ pipeline/
 
 ## Dashboard SQL Views
 
+Generated automatically in your Unity Catalog schema:
 - `vw_latest_kpis` — Current KPI values
 - `vw_top_risks` — Top 100 riskiest CVEs
 - `vw_daily_trends` — Daily vulnerability trends

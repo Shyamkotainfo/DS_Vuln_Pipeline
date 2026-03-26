@@ -12,10 +12,10 @@
 # Unity Catalog Configuration
 # ============================================================
 
-CATALOG = "main"           # Change to your catalog name
-SCHEMA  = "vuln_pipeline"  # Schema/database name
+CATALOG = "vulnerability_intelligence"  # Dedicated catalog for this pipeline
+SCHEMA  = "pipeline"                    # Schema inside the catalog
 
-# Create schema if not exists
+# Create catalog and schema if they don't exist
 spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
 spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
 spark.sql(f"USE CATALOG {CATALOG}")
