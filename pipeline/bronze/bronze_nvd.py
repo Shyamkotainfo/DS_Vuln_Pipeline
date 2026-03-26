@@ -57,8 +57,8 @@ def extract_nvd_data(since=None, api_key=None):
     start_date = datetime.fromisoformat(since) if since else datetime(1999, 1, 1)
     end_date = datetime.utcnow()
     
-    # Use less workers without an API key to avoid getting IP-banned
-    max_workers = SOURCES["nvd"].get("max_workers", 5) if api_key else 2
+    # User requested 8 threads unconditionally
+    max_workers = 8
     delay = SOURCES["nvd"]["rate_limit_delay"] if api_key else SOURCES["nvd"]["rate_limit_delay_no_key"]
     batch_size = SOURCES["nvd"]["batch_size"]
     

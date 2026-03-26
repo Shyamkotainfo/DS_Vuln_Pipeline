@@ -31,23 +31,7 @@ print("=" * 60)
 
 # COMMAND ----------
 
-# MAGIC %run ./bronze/bronze_nvd
-
-# COMMAND ----------
-
-# MAGIC %run ./bronze/bronze_cisa
-
-# COMMAND ----------
-
-# MAGIC %run ./bronze/bronze_epss
-
-# COMMAND ----------
-
-# MAGIC %run ./bronze/bronze_exploitdb
-
-# COMMAND ----------
-
-# MAGIC %run ./bronze/bronze_metasploit
+# MAGIC %run ./bronze/bronze_master
 
 # COMMAND ----------
 
