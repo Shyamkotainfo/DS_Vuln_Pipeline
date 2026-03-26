@@ -2,31 +2,47 @@
 # MAGIC %md
 # MAGIC # Pipeline Configuration
 # MAGIC Central configuration for the Medallion Architecture pipeline.
-# MAGIC Update `GCS_BUCKET` and `CATALOG`/`DATABASE` to match your environment.
+# MAGIC 
+# MAGIC **Setup**: Upload your GCP service account JSON key to DBFS first:
+# MAGIC ```
+# MAGIC dbutils.fs.cp("file:/tmp/your-sa-key.json", "dbfs:/gcs-keys/gcs-sa-key.json")
+# MAGIC ```
 
 # COMMAND ----------
 
 # ============================================================
-# Storage Configuration
+# GCS Authentication — Service Account Key
 # ============================================================
-# For Databricks Community Edition (free) → use DBFS
-# For paid Databricks on GCP → uncomment the GCS line instead
+# Upload your GCP service account JSON key to DBFS, then reference it here.
+# This allows Spark to read/write directly to gs:// paths.
 
-# DBFS (works on free tier — no cloud IAM needed)
-STORAGE_BASE = "dbfs:/FileStore"
+GCS_SA_KEY_PATH = "/dbfs/gcs-keys/gcs-sa-key.json"
 
-# GCS (uncomment this and comment above when you have GCS auth configured)
-# STORAGE_BASE = "gs://observability_data_pipeline"
+try:
+    spark.conf.set("google.cloud.auth.service.account.enable", "true")
+    spark.conf.set("google.cloud.auth.service.account.json.keyfile", GCS_SA_KEY_PATH)
+    spark.conf.set("fs.gs.auth.service.account.enable", "true")
+    spark.conf.set("fs.gs.auth.service.account.json.keyfile", GCS_SA_KEY_PATH)
+    print(f"✅ GCS auth configured with key: {GCS_SA_KEY_PATH}")
+except Exception as e:
+    print(f"⚠️ GCS auth config warning: {e}")
+
+# COMMAND ----------
+
+# ============================================================
+# GCS Bucket & Paths
+# ============================================================
+
+GCS_BUCKET = "gs://observability_data_pipeline"
 
 # Base paths for each layer
-BASE_PATH = f"{STORAGE_BASE}/vulnerability_pipeline"
+BASE_PATH = f"{GCS_BUCKET}/vulnerability_pipeline"
 BRONZE_PATH = f"{BASE_PATH}/bronze"
 SILVER_PATH = f"{BASE_PATH}/silver"
 GOLD_PATH   = f"{BASE_PATH}/gold"
 
-# Unity Catalog (optional — set to None if not using UC)
-CATALOG  = "vulnerability_catalog"
-DATABASE = "vuln_db"
+# Database for managed tables
+DATABASE = "vuln_pipeline_db"
 
 # COMMAND ----------
 
