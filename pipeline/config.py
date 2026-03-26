@@ -2,76 +2,58 @@
 # MAGIC %md
 # MAGIC # Pipeline Configuration
 # MAGIC Central configuration for the Medallion Architecture pipeline.
-# MAGIC 
-# MAGIC **Setup**: Upload your GCP service account JSON key to DBFS first:
-# MAGIC ```
-# MAGIC dbutils.fs.cp("file:/tmp/your-sa-key.json", "dbfs:/gcs-keys/gcs-sa-key.json")
-# MAGIC ```
+# MAGIC Uses **Unity Catalog managed tables** — no external storage required.
+# MAGIC
+# MAGIC **Setup**: Just update CATALOG and SCHEMA below, then run.
 
 # COMMAND ----------
 
 # ============================================================
-# GCS Authentication — Service Account Key
+# Unity Catalog Configuration
 # ============================================================
-# Upload your GCP service account JSON key to DBFS, then reference it here.
-# This allows Spark to read/write directly to gs:// paths.
 
-GCS_SA_KEY_PATH = "/dbfs/gcs-keys/gcs-sa-key.json"
+CATALOG = "main"           # Change to your catalog name
+SCHEMA  = "vuln_pipeline"  # Schema/database name
 
-try:
-    spark.conf.set("google.cloud.auth.service.account.enable", "true")
-    spark.conf.set("google.cloud.auth.service.account.json.keyfile", GCS_SA_KEY_PATH)
-    spark.conf.set("fs.gs.auth.service.account.enable", "true")
-    spark.conf.set("fs.gs.auth.service.account.json.keyfile", GCS_SA_KEY_PATH)
-    print(f"✅ GCS auth configured with key: {GCS_SA_KEY_PATH}")
-except Exception as e:
-    print(f"⚠️ GCS auth config warning: {e}")
+# Create schema if not exists
+spark.sql(f"CREATE CATALOG IF NOT EXISTS {CATALOG}")
+spark.sql(f"CREATE SCHEMA IF NOT EXISTS {CATALOG}.{SCHEMA}")
+spark.sql(f"USE CATALOG {CATALOG}")
+spark.sql(f"USE SCHEMA {SCHEMA}")
+
+print(f"✅ Using Unity Catalog: {CATALOG}.{SCHEMA}")
 
 # COMMAND ----------
 
 # ============================================================
-# GCS Bucket & Paths
+# Table Names (Unity Catalog: catalog.schema.table)
 # ============================================================
 
-GCS_BUCKET = "gs://observability_data_pipeline"
-
-# Base paths for each layer
-BASE_PATH = f"{GCS_BUCKET}/vulnerability_pipeline"
-BRONZE_PATH = f"{BASE_PATH}/bronze"
-SILVER_PATH = f"{BASE_PATH}/silver"
-GOLD_PATH   = f"{BASE_PATH}/gold"
-
-# Database for managed tables
-DATABASE = "vuln_pipeline_db"
-
-# COMMAND ----------
-
-# ============================================================
-# Table Names
-# ============================================================
+def _tbl(name):
+    return f"{CATALOG}.{SCHEMA}.{name}"
 
 BRONZE_TABLES = {
-    "nvd":        f"{BRONZE_PATH}/nvd",
-    "cisa":       f"{BRONZE_PATH}/cisa",
-    "epss":       f"{BRONZE_PATH}/epss",
-    "exploitdb":  f"{BRONZE_PATH}/exploitdb",
-    "metasploit": f"{BRONZE_PATH}/metasploit",
+    "nvd":        _tbl("bronze_nvd"),
+    "cisa":       _tbl("bronze_cisa"),
+    "epss":       _tbl("bronze_epss"),
+    "exploitdb":  _tbl("bronze_exploitdb"),
+    "metasploit": _tbl("bronze_metasploit"),
 }
 
 SILVER_TABLES = {
-    "nvd":        f"{SILVER_PATH}/nvd",
-    "cisa":       f"{SILVER_PATH}/cisa",
-    "epss":       f"{SILVER_PATH}/epss",
-    "exploitdb":  f"{SILVER_PATH}/exploitdb",
-    "metasploit": f"{SILVER_PATH}/metasploit",
+    "nvd":        _tbl("silver_nvd"),
+    "cisa":       _tbl("silver_cisa"),
+    "epss":       _tbl("silver_epss"),
+    "exploitdb":  _tbl("silver_exploitdb"),
+    "metasploit": _tbl("silver_metasploit"),
 }
 
 GOLD_TABLES = {
-    "vulnerability_master": f"{GOLD_PATH}/vulnerability_master",
-    "risk_scoring":         f"{GOLD_PATH}/risk_scoring",
-    "trend_analytics":      f"{GOLD_PATH}/trend_analytics",
-    "exploit_readiness":    f"{GOLD_PATH}/exploit_readiness",
-    "kpis":                 f"{GOLD_PATH}/kpis",
+    "vulnerability_master": _tbl("gold_vulnerability_master"),
+    "risk_scoring":         _tbl("gold_risk_scoring"),
+    "trend_analytics":      _tbl("gold_trend_analytics"),
+    "exploit_readiness":    _tbl("gold_exploit_readiness"),
+    "kpis":                 _tbl("gold_kpis"),
 }
 
 # COMMAND ----------
@@ -84,7 +66,7 @@ SOURCES = {
     "nvd": {
         "url": "https://services.nvd.nist.gov/rest/json/cves/2.0",
         "api_key": None,  # Set below after try/except
-        "rate_limit_delay": 0.6,   # seconds between calls with API key
+        "rate_limit_delay": 0.6,
         "rate_limit_delay_no_key": 6.0,
         "batch_size": 2000,
         "max_workers": 5,

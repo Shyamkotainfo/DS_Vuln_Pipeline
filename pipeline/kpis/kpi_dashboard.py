@@ -47,10 +47,10 @@ print(f"Date Ranges: today={TODAY_STR}, week_ago={WEEK_AGO_STR}, month_ago={MONT
 # ============================================================
 
 # Full master for total counts
-df_master = spark.read.format("delta").load(GOLD_TABLES["vulnerability_master"])
+df_master = spark.table(GOLD_TABLES["vulnerability_master"])
 
 # Risk scoring — filter to latest computed batch only
-df_risk = spark.read.format("delta").load(GOLD_TABLES["risk_scoring"]) \
+df_risk = spark.table(GOLD_TABLES["risk_scoring"]) \
     .filter(
         (F.col("year") == NOW.year) &
         (F.col("month") == NOW.month) &
@@ -58,7 +58,7 @@ df_risk = spark.read.format("delta").load(GOLD_TABLES["risk_scoring"]) \
     )
 
 # Exploit readiness — latest batch
-df_readiness = spark.read.format("delta").load(GOLD_TABLES["exploit_readiness"]) \
+df_readiness = spark.table(GOLD_TABLES["exploit_readiness"]) \
     .filter(
         (F.col("year") == NOW.year) &
         (F.col("month") == NOW.month) &
@@ -411,25 +411,19 @@ df_kpis = spark.createDataFrame(
     .withColumn("month", F.lit(NOW.month).cast(IntegerType())) \
     .withColumn("day", F.lit(NOW.day).cast(IntegerType()))
 
-GOLD_KPI_PATH = GOLD_TABLES["kpis"]
+TABLE_NAME = GOLD_TABLES["kpis"]
 
 df_kpis.write.format("delta").mode("append") \
     .partitionBy("year", "month", "day") \
-    .save(GOLD_KPI_PATH)
+    .saveAsTable(TABLE_NAME)
 
-print(f"✅ {len(kpi_data)} KPIs written to {GOLD_KPI_PATH} for {TODAY_STR}")
+print(f"✅ {len(kpi_data)} KPIs written to {TABLE_NAME} for {TODAY_STR}")
 
 # COMMAND ----------
 
 # ============================================================
 # Register SQL Views — ALL with WHERE Conditions
 # ============================================================
-
-spark.sql(f"CREATE TABLE IF NOT EXISTS gold_kpis USING DELTA LOCATION '{GOLD_KPI_PATH}'")
-spark.sql(f"CREATE TABLE IF NOT EXISTS gold_vulnerability_master USING DELTA LOCATION '{GOLD_TABLES['vulnerability_master']}'")
-spark.sql(f"CREATE TABLE IF NOT EXISTS gold_risk_scoring USING DELTA LOCATION '{GOLD_TABLES['risk_scoring']}'")
-spark.sql(f"CREATE TABLE IF NOT EXISTS gold_trend_analytics USING DELTA LOCATION '{GOLD_TABLES['trend_analytics']}'")
-spark.sql(f"CREATE TABLE IF NOT EXISTS gold_exploit_readiness USING DELTA LOCATION '{GOLD_TABLES['exploit_readiness']}'")
 
 # COMMAND ----------
 

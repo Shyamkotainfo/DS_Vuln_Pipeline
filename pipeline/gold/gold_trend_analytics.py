@@ -21,7 +21,7 @@ from datetime import datetime
 # Read Gold Master
 # ============================================================
 
-df_master = spark.read.format("delta").load(GOLD_TABLES["vulnerability_master"])
+df_master = spark.table(GOLD_TABLES["vulnerability_master"])
 print(f"Master rows: {df_master.count()}")
 
 # COMMAND ----------
@@ -130,7 +130,7 @@ df_cwe_trend = df_master \
 # ============================================================
 
 NOW = datetime.utcnow()
-GOLD_PATH = GOLD_TABLES["trend_analytics"]
+TABLE_NAME = GOLD_TABLES["trend_analytics"]
 
 # Combine into a union-friendly format with a trend_type discriminator
 df_daily_out = df_daily \
@@ -160,15 +160,6 @@ df_trends = df_daily_out.unionByName(df_weekly_out).unionByName(df_monthly_out) 
 df_trends.write.format("delta").mode("overwrite") \
     .partitionBy("year", "month", "day") \
     .option("overwriteSchema", "true") \
-    .save(GOLD_PATH)
+    .saveAsTable(TABLE_NAME)
 
-print(f"✅ gold_trend_analytics written — {df_trends.count()} rows")
-
-# COMMAND ----------
-
-spark.sql(f"""
-    CREATE TABLE IF NOT EXISTS gold_trend_analytics
-    USING DELTA
-    LOCATION '{GOLD_PATH}'
-""")
-print("✅ gold_trend_analytics registered")
+print(f"✅ {TABLE_NAME} written — {df_trends.count()} rows")

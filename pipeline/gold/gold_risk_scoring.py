@@ -21,7 +21,7 @@ from datetime import datetime
 # Read Gold Master
 # ============================================================
 
-df_master = spark.read.format("delta").load(GOLD_TABLES["vulnerability_master"])
+df_master = spark.table(GOLD_TABLES["vulnerability_master"])
 print(f"Master table rows: {df_master.count()}")
 
 # COMMAND ----------
@@ -115,27 +115,24 @@ df_risk.groupBy("risk_tier").count().orderBy("risk_tier").show()
 # Write Gold Risk Scoring — Delta MERGE
 # ============================================================
 
-GOLD_PATH = GOLD_TABLES["risk_scoring"]
+TABLE_NAME = GOLD_TABLES["risk_scoring"]
 
-if DeltaTable.isDeltaTable(spark, GOLD_PATH):
-    delta_table = DeltaTable.forPath(spark, GOLD_PATH)
+table_exists = spark.catalog.tableExists(TABLE_NAME)
+
+if table_exists:
+    from delta.tables import DeltaTable
+    delta_table = DeltaTable.forName(spark, TABLE_NAME)
     delta_table.alias("t").merge(
         df_risk.alias("s"), "t.cve_id = s.cve_id"
     ).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()
-    print("✅ MERGE into gold_risk_scoring complete")
+    print(f"✅ MERGE into {TABLE_NAME} complete")
 else:
     df_risk.write.format("delta").mode("overwrite") \
         .partitionBy("year", "month", "day") \
-        .save(GOLD_PATH)
-    print("✅ Initial gold_risk_scoring write complete")
+        .saveAsTable(TABLE_NAME)
+    print(f"✅ Initial {TABLE_NAME} write complete")
 
 # COMMAND ----------
 
-spark.sql(f"""
-    CREATE TABLE IF NOT EXISTS gold_risk_scoring
-    USING DELTA
-    LOCATION '{GOLD_PATH}'
-""")
-
-spark.sql(f"OPTIMIZE delta.`{GOLD_PATH}` ZORDER BY (composite_risk_score)")
-print("✅ gold_risk_scoring optimized")
+spark.sql(f"OPTIMIZE {TABLE_NAME} ZORDER BY (composite_risk_score)")
+print(f"✅ {TABLE_NAME} optimized")
