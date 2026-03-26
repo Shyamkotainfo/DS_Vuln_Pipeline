@@ -7,14 +7,19 @@
 # COMMAND ----------
 
 # ============================================================
-# GCS & Delta Lake Configuration
+# Storage Configuration
 # ============================================================
+# For Databricks Community Edition (free) → use DBFS
+# For paid Databricks on GCP → uncomment the GCS line instead
 
-# -- Update this to your GCP Cloud Storage bucket --
-GCS_BUCKET = "gs://observability_data_pipeline"
+# DBFS (works on free tier — no cloud IAM needed)
+STORAGE_BASE = "dbfs:/FileStore"
+
+# GCS (uncomment this and comment above when you have GCS auth configured)
+# STORAGE_BASE = "gs://observability_data_pipeline"
 
 # Base paths for each layer
-BASE_PATH = f"{GCS_BUCKET}/vulnerability_pipeline"
+BASE_PATH = f"{STORAGE_BASE}/vulnerability_pipeline"
 BRONZE_PATH = f"{BASE_PATH}/bronze"
 SILVER_PATH = f"{BASE_PATH}/silver"
 GOLD_PATH   = f"{BASE_PATH}/gold"
