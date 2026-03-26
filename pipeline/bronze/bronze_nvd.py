@@ -23,7 +23,9 @@ from pyspark.sql.types import *
 
 # COMMAND ----------
 
-def fetch_nvd_page(start_index=0, limit=2000, since=None, end=None, api_key=None):
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def fetch_nvd_page(start_index=0, limit=2000, since=None, end=None, api_key=None, retries=3):
     base_url = SOURCES["nvd"]["url"]
     headers = {}
     if api_key:
@@ -33,55 +35,85 @@ def fetch_nvd_page(start_index=0, limit=2000, since=None, end=None, api_key=None
         params["lastModStartDate"] = since
     if end:
         params["lastModEndDate"] = end
-    try:
-        response = requests.get(base_url, headers=headers, params=params, timeout=60)
-        if response.status_code == 429:
-            print(f"Rate limit hit. Sleeping 10s...")
-            time.sleep(10)
-            return fetch_nvd_page(start_index, limit, since, end, api_key)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("vulnerabilities", []), data.get("totalResults", 0)
-    except Exception as e:
-        print(f"Error fetching NVD at index {start_index}: {e}")
-        return [], 0
+        
+    for attempt in range(retries):
+        try:
+            response = requests.get(base_url, headers=headers, params=params, timeout=60)
+            if response.status_code == 429:
+                sleep_time = 10 * (attempt + 1)
+                print(f"Rate limit hit at offset {start_index}. Sleeping {sleep_time}s...")
+                time.sleep(sleep_time)
+                continue
+            response.raise_for_status()
+            data = response.json()
+            return data.get("vulnerabilities", []), data.get("totalResults", 0)
+        except Exception as e:
+            print(f"Error fetching NVD at index {start_index} (attempt {attempt+1}): {e}")
+            time.sleep(5)
+    return [], 0
+
 
 def extract_nvd_data(since=None, api_key=None):
     start_date = datetime.fromisoformat(since) if since else datetime(1999, 1, 1)
     end_date = datetime.utcnow()
+    
+    # Use less workers without an API key to avoid getting IP-banned
+    max_workers = SOURCES["nvd"].get("max_workers", 5) if api_key else 2
     delay = SOURCES["nvd"]["rate_limit_delay"] if api_key else SOURCES["nvd"]["rate_limit_delay_no_key"]
     batch_size = SOURCES["nvd"]["batch_size"]
+    
     all_records = []
     current_start = start_date
+    
     while current_start < end_date:
         current_end = min(current_start + timedelta(days=119), end_date)
         start_str = current_start.isoformat()
         end_str = current_end.isoformat()
-        print(f"NVD window: {start_str} → {end_str}")
+        print(f"\nNVD window: {start_str} → {end_str}")
+        
+        # Initial peek to get total count
         _, total = fetch_nvd_page(0, 1, start_str, end_str, api_key)
         if total == 0:
             current_start = current_end
             continue
-        print(f"  → {total} CVEs in this window")
-        for offset in range(0, total, batch_size):
-            vulns, _ = fetch_nvd_page(offset, batch_size, start_str, end_str, api_key)
-            for v in vulns:
-                cve = v.get("cve", {})
-                all_records.append({
-                    "id": cve.get("id"),
-                    "sourceIdentifier": cve.get("sourceIdentifier"),
-                    "published": cve.get("published"),
-                    "lastModified": cve.get("lastModified"),
-                    "vulnStatus": cve.get("vulnStatus"),
-                    "cveTags": json.dumps(cve.get("cveTags", [])),
-                    "descriptions": json.dumps(cve.get("descriptions", [])),
-                    "metrics": json.dumps(cve.get("metrics", {})),
-                    "weaknesses": json.dumps(cve.get("weaknesses", [])),
-                    "configurations": json.dumps(cve.get("configurations", [])),
-                    "references": json.dumps(cve.get("references", [])),
-                })
-            time.sleep(delay)
+            
+        print(f"  → {total} CVEs in this window. Fetching concurrently with {max_workers} threads...")
+        offsets = list(range(0, total, batch_size))
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_offset = {
+                executor.submit(fetch_nvd_page, offset, batch_size, start_str, end_str, api_key): offset
+                for offset in offsets
+            }
+            
+            for future in as_completed(future_to_offset):
+                offset = future_to_offset[future]
+                try:
+                    vulns, _ = future.result()
+                    for v in vulns:
+                        cve = v.get("cve", {})
+                        all_records.append({
+                            "id": cve.get("id"),
+                            "sourceIdentifier": cve.get("sourceIdentifier"),
+                            "published": cve.get("published"),
+                            "lastModified": cve.get("lastModified"),
+                            "vulnStatus": cve.get("vulnStatus"),
+                            "cveTags": json.dumps(cve.get("cveTags", [])),
+                            "descriptions": json.dumps(cve.get("descriptions", [])),
+                            "metrics": json.dumps(cve.get("metrics", {})),
+                            "weaknesses": json.dumps(cve.get("weaknesses", [])),
+                            "configurations": json.dumps(cve.get("configurations", [])),
+                            "references": json.dumps(cve.get("references", [])),
+                        })
+                    print(f"    ✓ Downloaded offset {offset}/{total}")
+                except Exception as exc:
+                    print(f"    ! Offset {offset} generated an exception: {exc}")
+                
+                # Small intra-thread delay
+                time.sleep(delay / max_workers)
+                
         current_start = current_end
+        
     return all_records
 
 # COMMAND ----------
